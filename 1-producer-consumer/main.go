@@ -24,6 +24,17 @@ func producer(stream Stream) (tweets []*Tweet) {
 	}
 }
 
+func concurrentProducer(stream Stream, tweets chan<- *Tweet) {
+	for {
+		tweet, err := stream.Next()
+		if err == ErrEOF {
+			close(tweets)
+			return
+		}
+		tweets <- tweet
+	}
+}
+
 func consumer(tweets []*Tweet) {
 	for _, t := range tweets {
 		if t.IsTalkingAboutGo() {
@@ -34,15 +45,32 @@ func consumer(tweets []*Tweet) {
 	}
 }
 
+func concurrentConsumer(tweets <-chan *Tweet, done chan<- struct{}) {
+	for tweet := range tweets {
+		if tweet.IsTalkingAboutGo() {
+			fmt.Println(tweet.Username, "\ttweets about golang")
+		} else {
+			fmt.Println(tweet.Username, "\tdoes not tweet about golang")
+		}
+	}
+	done <- struct{}{}
+}
+
 func main() {
 	start := time.Now()
 	stream := GetMockStream()
-
+	tweetChannel := make(chan *Tweet)
+	done := make(chan struct{})
 	// Producer
-	tweets := producer(stream)
+	// tweets := producer(stream)
 
 	// Consumer
-	consumer(tweets)
+	// consumer(tweets)
 
+	//Concurrent implementation starts here
+	go concurrentProducer(stream, tweetChannel)
+	go concurrentConsumer(tweetChannel, done)
+
+	<-done
 	fmt.Printf("Process took %s\n", time.Since(start))
 }
